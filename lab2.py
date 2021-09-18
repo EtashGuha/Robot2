@@ -6,11 +6,14 @@ import time
 import re
 from datetime import datetime
 from cozmo.util import degrees, distance_mm, speed_mmps
+from checker_cozmo import RobotStateDisplay
 import numpy as np
 from skimage import io, feature, filters, exposure, color
 from sklearn import svm, metrics
-from img_classification import ImageClassifier
+from imgclassification_sol import ImageClassifier
 
+both_speed = .5
+turn_speed = (.1, .5)
 
 def mission1(sdk_conn):
     '''
@@ -25,9 +28,21 @@ def mission1(sdk_conn):
     #######################
     # WRITE YOUR CODE HERE#
     #######################
-    pass
+    robot = sdk_conn.wait_for_robot()
+    robot.camera.enable_auto_exposure()
+    robot.camera.image_stream_enabled = True
+    latest_image = robot.world.latest_image
+    
+    next_state = "Idle"
+    if latest_image is not None:
+        print(np.array(latest_image.raw_image).shape)
+        input_img = np.expand_dims(np.array(latest_image.raw_image), axis=0)
+        extracted_data = img_clf.extract_image_features(input_img)
 
-
+        label = img_clf.predict_labels(extracted_data)
+        robot.say_text(label[0]).wait_for_completed()
+        next_state = label[0] if label[0] != 'none' and label[0] != 'place' else "Idle"
+    return next_state
 def mission2(sdk_conn):
     '''
     Mission 2: Defuse the Bomb (activated by "order")
@@ -45,10 +60,23 @@ def mission2(sdk_conn):
     Return to the Idle state afterwards.
     '''
 
-    #######################
-    # WRITE YOUR CODE HERE#
-    #######################
-    pass
+    robot = sdk_conn.wait_for_robot()
+    robot.move_lift(-1)
+    time.sleep(1)
+    # robot.drive_straight(distance_mm(1000), speed_mmps(1000)).wait_for_completed()
+    robot.drive_straight(distance_mm(65.1), speed_mmps(1000)).wait_for_completed()
+    robot.move_lift(1)
+    time.sleep(1)
+    # robot.drive_straight(distance_mm(1000), speed_mmps(1000)).wait_for_completed()
+    robot.drive_straight(distance_mm(330.2), speed_mmps(1000)).wait_for_completed()
+    robot.move_lift(-1)
+    time.sleep(1)
+    robot.drive_straight(distance_mm(-30), speed_mmps(1000)).wait_for_completed()
+    robot.turn_in_place(degrees(180)).wait_for_completed()
+    robot.drive_straight(distance_mm(300.2), speed_mmps(1000)).wait_for_completed()
+
+    time.sleep(1)
+    return "Idle"
 
 
 def mission3(sdk_conn):
@@ -61,11 +89,34 @@ def mission3(sdk_conn):
 
     Return to the Idle state afterwards.
     '''
+    robot = sdk_conn.wait_for_robot()
+    print("Mission 3")
+    # robot.drive_wheels(80,40)
+    # time.sleep(2)
+    intial_time = time.time()
+    curr_time = 0
 
-    #######################
-    # WRITE YOUR CODE HERE#
-    #######################
-    pass
+
+    while curr_time < 6.283:
+        # if time.time() - curr_time < 1:
+        #     continue
+
+        curr_time = time.time() - intial_time 
+        left_wheel_speed = np.sin(curr_time + 3*np.pi/4) + 1
+        right_wheel_speed = np.sin(curr_time + 1*np.pi/4) + 1
+        print("LW: {} RW: {}".format(left_wheel_speed, right_wheel_speed))
+
+        robot.drive_wheels(50 * left_wheel_speed, 50 * right_wheel_speed)
+
+    robot.drive_wheels(0, 0)
+
+    return "Idle"
+        
+
+
+
+
+    
 
 
 def mission4(sdk_conn):
@@ -82,7 +133,9 @@ def mission4(sdk_conn):
     #######################
     # WRITE YOUR CODE HERE#
     #######################
-    pass
+    robot = sdk_conn.wait_for_robot()
+    robot.drive_wheels(both_speed, both_speed, duration = 1).wait_for_completion()
+    
 
 
 def controller(sdk_conn):
@@ -95,15 +148,19 @@ def controller(sdk_conn):
     HINT: If you're wondering why we may want the frames list, take a look at the attached
     calculations on Canvas.
     '''
-    state = "none"
+    state = "Idle"
     frames = ["none"]
 
     while(True):
+        if state == "Idle":
+            state = mission1(sdk_conn)
+        elif state == "order":
+            state = mission2(sdk_conn)
+        elif state == "drone":
+            state = mission3(sdk_conn)
 
-        #######################
-        # WRITE YOUR CODE HERE#
-        #######################
-        pass
+
+        
 
 
 if __name__ == '__main__':
@@ -116,6 +173,6 @@ if __name__ == '__main__':
         img_clf = pickle.load(f)
 
     try:
-        cozmo.connect(controller)
+        sdk_conn = cozmo.connect(controller)
     except cozmo.ConnectionError as e:
         sys.exit("A connection error occurred: %s" % e)

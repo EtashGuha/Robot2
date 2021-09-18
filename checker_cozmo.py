@@ -8,8 +8,6 @@ from itertools import chain
 import sys
 import datetime
 import time
-
-
 class RobotStateDisplay(cozmo.annotate.Annotator):
 
     def apply(self, image, scale):
